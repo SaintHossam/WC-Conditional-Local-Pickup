@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: WC Conditional Local Pickup (SA)
+ * Plugin Name: WC Conditional Local Pickup
  * Plugin URI: https://github.com/SaintHossam/
  * Description: إظهار "الاستلام من المتجر" فقط إذا كانت مدينة الوجهة جدة/ينبع (بكل تهجئاتها). في غير ذلك تُخفى local_pickup فقط وتبقى باقي طرق الشحن.
  *              Show "Local Pickup" only if the destination city is Jeddah/Yanbu (all variations). Otherwise, hide only local_pickup and keep other shipping methods.
