@@ -3,6 +3,7 @@
  * Plugin Name: WC Conditional Local Pickup (SA – Jeddah/Yanbu)
  * Plugin URI: https://github.com/SaintHossam/
  * Description: إظهار "الاستلام من المتجر" فقط إذا كانت مدينة الوجهة جدة/ينبع (بكل تهجئاتها). في غير ذلك تُخفى local_pickup فقط وتبقى باقي طرق الشحن.
+ *              Show "Local Pickup" only if the destination city is Jeddah/Yanbu (all variations). Otherwise, hide only local_pickup and keep other shipping methods.
  * Author: Saint Hossam
  * Author URI: https://github.com/SaintHossam/
  * Version: 1.1.0
@@ -20,6 +21,7 @@ if (! defined('ABSPATH')) {
 
 /**
  * نقطة القوة هنا: الاعتماد على $package['destination'] بدل WC()->customer لضمان دقة المدينة/الدولة.
+ * Strength point: Relying on $package['destination'] instead of WC()->customer to ensure accurate city/country data.
  */
 add_filter('woocommerce_package_rates', 'wcclpsa_filter_local_pickup_rates', 9999, 2);
 
@@ -33,6 +35,7 @@ function wcclpsa_filter_local_pickup_rates(array $rates, array $package): array
     $cityRaw = (string) ($destination['city'] ?? '');
 
     // إذا ليست السعودية، لا تغييرات.
+    // If not Saudi Arabia, make no changes.
     if ($country !== 'SA') {
         return $rates;
     }
@@ -40,6 +43,7 @@ function wcclpsa_filter_local_pickup_rates(array $rates, array $package): array
     $city = wcclpsa_normalize_city($cityRaw);
 
     // قائمة المدن المسموح بها (مطبّعة مسبقاً لمقارنة سريعة)
+    // Allowed cities list (pre-normalized for fast comparison)
     static $ALLOWED = null;
     if ($ALLOWED === null) {
         $allowedCities = [
@@ -55,11 +59,13 @@ function wcclpsa_filter_local_pickup_rates(array $rates, array $package): array
     $isAllowed = $city !== '' && in_array($city, $ALLOWED, true);
 
     // إن كانت المدينة مسموحاً بها نترك كل طرق الشحن كما هي.
+    // If city is allowed, keep all shipping methods.
     if ($isAllowed) {
         return $rates;
     }
 
     // إخفاء local_pickup فقط.
+    // Hide only local_pickup.
     foreach ($rates as $rateId => $rate) {
         $methodId = is_object($rate) && isset($rate->method_id) ? (string) $rate->method_id : '';
         if ($methodId === 'local_pickup' || strpos($methodId, 'local_pickup') === 0) {
@@ -73,6 +79,8 @@ function wcclpsa_filter_local_pickup_rates(array $rates, array $package): array
 /**
  * تطبيع قوي لاسم المدينة العربية/اللاتينية.
  * WHY: لتلافي اختلافات الإدخال (تشكيل/همزات/شرطات/مسافات/حالات).
+ * Strong normalization for Arabic/Latin city names.
+ * WHY: To avoid input variations (diacritics, hamza forms, dashes, spaces, case differences).
  */
 function wcclpsa_normalize_city(string $value): string
 {
@@ -82,9 +90,11 @@ function wcclpsa_normalize_city(string $value): string
     }
 
     // إزالة مسافات مكررة
+    // Remove duplicate spaces
     $value = preg_replace('/\s+/u', ' ', $value);
 
     // توحيد بعض الحروف العربية
+    // Normalize some Arabic letters
     $map = [
         'أ' => 'ا', 'آ' => 'ا', 'إ' => 'ا',
         'ة' => 'ه',
@@ -93,16 +103,20 @@ function wcclpsa_normalize_city(string $value): string
     $value = strtr($value, $map);
 
     // إزالة التشكيل العربي
+    // Remove Arabic diacritics
     $value = preg_replace('/[\x{0610}-\x{061A}\x{064B}-\x{065F}\x{0670}\x{06D6}-\x{06ED}]/u', '', $value);
 
     // خفض الحالة للاتيني
+    // Lowercase for Latin
     $value = mb_strtolower($value, 'UTF-8');
 
-    // إزالة علامات ترقيم/شرطات/نقاط لتوحيد "yanbu al-bahr" و"yanbu al bahr" و"yanbualbahr"
+    // إزالة علامات ترقيم/شرطات/نقاط لتوحيد
+    // Remove punctuation/dashes/dots to unify forms like "yanbu al-bahr", "yanbu al bahr", "yanbualbahr"
     $value = str_replace(['-', '_', '.', ','], ' ', $value);
     $value = preg_replace('/\s+/u', ' ', $value);
 
     // قص المسافات
+    // Trim spaces
     $value = trim($value);
 
     return $value;
@@ -111,6 +125,9 @@ function wcclpsa_normalize_city(string $value): string
 /**
  * مُساعد (اختياري): تمكين تتبع للقيمة المطبّعة عند الحاجة.
  * مثال الاستخدام:
+ *   do_action('wcclpsa_debug_city', $cityRaw, wcclpsa_normalize_city($cityRaw));
+ * Helper (optional): Enable tracking for normalized value when needed.
+ * Example usage:
  *   do_action('wcclpsa_debug_city', $cityRaw, wcclpsa_normalize_city($cityRaw));
  */
 add_action('wcclpsa_debug_city', function (string $raw, string $normalized) {
@@ -123,6 +140,8 @@ add_action('wcclpsa_debug_city', function (string $raw, string $normalized) {
 /**
  * اجعل حقل المدينة يُعيد حساب الشحن تلقائياً عند التغيير (Checkout & Cart).
  * WHY: بعض الثيمات تُسقط class التحديث أو لا تُطلق أحداث WooCommerce.
+ * Make the city field automatically recalculate shipping when changed (Checkout & Cart).
+ * WHY: Some themes drop the update class or don't trigger WooCommerce events.
  */
 add_filter('woocommerce_default_address_fields', function(array $fields): array {
     if (isset($fields['city'])) {
@@ -164,6 +183,8 @@ add_action('wp_enqueue_scripts', function () {
 /**
  * Patch: بعض المتاجر في السعودية تستخدم حقل الولاية STATE كقائمة مدن.
  * نزيل الفلتر القديم ونستبدله بإصدار يدعم state code/label.
+ * Patch: Some stores in Saudi Arabia use the STATE field as a city list.
+ * Remove the old filter and replace with a version supporting state code/label.
  */
 add_action('init', function(){
     remove_filter('woocommerce_package_rates', 'wcclpsa_filter_local_pickup_rates', 9999);
@@ -178,6 +199,8 @@ function wcclpsa_filter_local_pickup_rates_v2(array $rates, array $package): arr
     $cityRaw   = (string) ($destination['city'] ?? '');
     $stateCode = (string) ($destination['state'] ?? '');
 
+    // إذا ليست السعودية، لا تغييرات.
+    // If not Saudi Arabia, no changes.
     if ($country !== 'SA') {
         return $rates;
     }
@@ -193,6 +216,8 @@ function wcclpsa_filter_local_pickup_rates_v2(array $rates, array $package): arr
     $cityNorm  = wcclpsa_normalize_city($cityRaw);
     $stateNorm = wcclpsa_normalize_city($stateLabel);
 
+    // قائمة المدن المسموح بها + أكواد الولاية المسموح بها
+    // Allowed cities list + allowed state codes
     static $ALLOWED = null;
     static $ALLOWED_CODES = null;
     if ($ALLOWED === null) {
@@ -211,10 +236,14 @@ function wcclpsa_filter_local_pickup_rates_v2(array $rates, array $package): arr
         ($stateCode !== '' && in_array(strtoupper($stateCode), $ALLOWED_CODES, true))
     );
 
+    // إذا المدينة أو الولاية مسموح بها، اترك كل طرق الشحن.
+    // If city or state is allowed, keep all shipping methods.
     if ($isAllowed) {
         return $rates;
     }
 
+    // إخفاء local_pickup فقط.
+    // Hide only local_pickup.
     foreach ($rates as $rateId => $rate) {
         $methodId = is_object($rate) && isset($rate->method_id) ? (string) $rate->method_id : '';
         if ($methodId === 'local_pickup' || strpos($methodId, 'local_pickup') === 0) {
@@ -226,6 +255,7 @@ function wcclpsa_filter_local_pickup_rates_v2(array $rates, array $package): arr
 }
 
 // أضف تحديث تلقائي عند تغيير state
+// Add auto-refresh when state changes
 add_action('wp_enqueue_scripts', function () {
     if (! (function_exists('is_checkout') && (is_checkout() || is_cart()))) {
         return;
@@ -250,6 +280,7 @@ add_action('wp_enqueue_scripts', function () {
 });
 
 // أضف كلاس التحديث على حقل state أيضاً
+// Add update class to state field as well
 add_filter('woocommerce_default_address_fields', function(array $fields): array {
     if (isset($fields['state'])) {
         $classes = isset($fields['state']['class']) && is_array($fields['state']['class']) ? $fields['state']['class'] : [];
@@ -260,4 +291,3 @@ add_filter('woocommerce_default_address_fields', function(array $fields): array 
     }
     return $fields;
 }, 21);
-
